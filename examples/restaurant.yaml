@@ -1,0 +1,12 @@
+name: Spice Garden
+type: restaurant
+timezone: Asia/Kolkata
+services:
+  - {id: table_two, name: Table For Two, duration_min: 60, price: 300}
+  - {id: table_four, name: Table For Four, duration_min: 90, price: 600}
+  - {id: private_dining, name: Private Dining, duration_min: 120, price: 2000}
+staff:
+  - {id: main_hall, name: Main Hall, services: [table_two, table_four], start: "12:00", end: "23:00"}
+  - {id: terrace, name: Terrace, services: [table_two], start: "18:00", end: "23:00"}
+  - {id: private_room, name: Private Room, services: [private_dining, table_four], start: "12:00", end: "23:00"}
+rules: {buffer_min: 15, cancel_window_hours: 3, hold_offer_minutes: 10}

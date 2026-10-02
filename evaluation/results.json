@@ -1,0 +1,15 @@
+{
+  "source": "synthetic replay",
+  "appointments": 5000,
+  "no_shows": 997,
+  "refilled": 282,
+  "refill_rate": 0.283,
+  "recovered_revenue": 141000,
+  "assumptions": {
+    "price": 500,
+    "waitlist_has_candidate": 0.5,
+    "candidate_accepts": 0.6,
+    "seed": 1
+  },
+  "note": "Estimate under stated assumptions, not a measured result."
+}

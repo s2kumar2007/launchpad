@@ -1,0 +1,11 @@
+name: Rao Family Clinic
+type: clinic
+timezone: Asia/Kolkata
+services:
+  - {id: consultation, name: Consultation, duration_min: 20, price: 600}
+  - {id: follow_up, name: Follow Up Visit, duration_min: 15, price: 300}
+  - {id: vaccination, name: Vaccination, duration_min: 10, price: 250}
+staff:
+  - {id: dr_rao, name: Doctor Rao, services: [consultation, follow_up], start: "09:00", end: "13:00"}
+  - {id: nurse_meena, name: Nurse Meena, services: [vaccination, follow_up], start: "09:00", end: "17:00"}
+rules: {buffer_min: 5, cancel_window_hours: 4, hold_offer_minutes: 10}

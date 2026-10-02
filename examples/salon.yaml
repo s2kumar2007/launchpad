@@ -1,0 +1,12 @@
+name: Glow Salon
+type: salon
+timezone: Asia/Kolkata
+services:
+  - {id: haircut, name: Haircut, duration_min: 30, price: 400}
+  - {id: hair_colour, name: Hair Colour, duration_min: 90, price: 1800}
+  - {id: beard_trim, name: Beard Trim, duration_min: 20, price: 200}
+  - {id: facial, name: Facial, duration_min: 45, price: 900}
+staff:
+  - {id: meena, name: Meena, services: [haircut, beard_trim, facial], start: "09:00", end: "18:00"}
+  - {id: mina, name: Mina, services: [haircut, hair_colour, facial], start: "11:00", end: "19:00"}
+rules: {buffer_min: 0, cancel_window_hours: 2, hold_offer_minutes: 15}

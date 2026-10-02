@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Launchpad Test Client</title>
+<style>
+:root{--bg:#0e1322;--card:#161d33;--line:#26304f;--tx:#e9edf8;--mut:#8c98b8;--ac:#6ea8ff;--ok:#4ade80;--bad:#f87171;--warn:#fbbf24}
+@media(prefers-color-scheme:light){:root{--bg:#f3f5fb;--card:#fff;--line:#dce2f0;--tx:#17203a;--mut:#65728f;--ac:#2f6df6;--ok:#16a34a;--bad:#dc2626;--warn:#b45309}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0}h1 small{color:var(--mut);font-weight:400}
+.badge{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--warn);color:var(--warn)}
+main{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px;padding:20px 24px;max-width:1200px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+h2{font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 12px}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+select,input,button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%}
+button{cursor:pointer;background:var(--ac);border:0;color:#fff;font-weight:600;margin-top:12px}button.sec{background:transparent;border:1px solid var(--line);color:var(--tx);width:auto;margin:0;padding:5px 10px;font-weight:500}
+.row{display:flex;gap:10px}.row>*{flex:1}.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{background:transparent;border:1px solid var(--ac);color:var(--ac);width:auto;margin:0;padding:6px 12px}
+.item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.item:first-child{border-top:0}
+.mut{color:var(--mut);font-size:13px}.msg{margin-top:10px;font-size:13px}.ok{color:var(--ok)}.bad{color:var(--bad)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tile{border:1px solid var(--line);border-radius:10px;padding:10px}.tile b{display:block;font-size:22px}
+pre{max-height:220px;overflow:auto;font-size:12px;color:var(--mut);margin:0;white-space:pre-wrap}
+</style></head><body>
+<header><h1 id="title">Launchpad <small>test client</small></h1>
+<div class="row" style="flex:0 1 380px"><select id="who"><option value="">Guest (no login)</option><option value="dev-alice">Alice (linked)</option><option value="dev-bob">Bob (linked)</option><option value="dev-carol">Carol (linked)</option></select><span class="badge">simulated · test traffic</span></div></header>
+<main>
+<section class="card"><h2>Find &amp; book</h2>
+<label>Service</label><select id="svc"></select>
+<div class="row"><div><label>Date</label><input type="date" id="date"></div><div><label>Near time</label><input type="time" id="time" value="10:00"></div></div>
+<button id="find">Find slots</button><div class="chips" id="slots"></div><div class="msg" id="msg"></div></section>
+<section class="card"><h2>My account</h2><div id="mine" class="mut">Choose a user to see bookings.</div></section>
+<section class="card"><h2>Owner stats</h2><div class="tiles" id="stats"></div><div class="mut" id="src" style="margin-top:10px"></div></section>
+<section class="card" style="grid-column:1/-1"><h2>MCP call log</h2><pre id="log"></pre></section>
+</main>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let last=null;
+async function call(name,args={}){
+  const h={'Content-Type':'application/json','Accept':'application/json, text/event-stream'};
+  if($('who').value)h.Authorization='Bearer '+$('who').value;
+  const r=await fetch('/mcp',{method:'POST',headers:h,body:JSON.stringify({jsonrpc:'2.0',id:Date.now(),method:'tools/call',params:{name,arguments:args}})});
+  const j=await r.json().catch(()=>({error:{message:'HTTP '+r.status}}));
+  const out=j.result?(j.result.structuredContent||JSON.parse(j.result.content[0].text)):{ok:false,error:j.error?.message||'HTTP '+r.status};
+  $('log').textContent=`${name}(${JSON.stringify(args)}) -> ${JSON.stringify(out)}\n`+$('log').textContent;return out}
+function say(t,ok){$('msg').className='msg '+(ok?'ok':'bad');$('msg').textContent=t}
+async function init(){
+  const d=new Date();d.setDate(d.getDate()+1);$('date').value=d.toISOString().slice(0,10);
+  const b=await call('business_info');$('title').innerHTML=esc(b.name)+' <small>test client</small>';
+  $('svc').innerHTML=b.services.map(s=>`<option value="${esc(s.id)}">${esc(s.name)} · ${s.duration_min} min · ₹${s.price}</option>`).join('');refresh()}
+async function find(){
+  const r=await call('check_availability',{service:$('svc').value,date:$('date').value,time:$('time').value});
+  const box=$('slots');box.innerHTML='';
+  if(!r.slots||!r.slots.length){box.innerHTML='<span class="mut">No free slots.</span> <button class="sec" id="wl">Join waitlist</button>';
+    $('wl').onclick=async()=>{const w=await call('join_waitlist',{service:$('svc').value});say(w.ok?'You are on the waitlist.':w.message||w.error,w.ok);refresh()};return}
+  r.slots.forEach(s=>{const b=document.createElement('button');b.className='chip';b.textContent=`${s.time} · ${s.staff}`;
+    b.onclick=async()=>{const x=await call('book_appointment',{service:$('svc').value,date:$('date').value,time:s.time,staff_id:s.staff_id});
+      say(x.ok?`Booked ${x.booking.service} at ${x.booking.time} with ${x.booking.staff} (${x.booking.id}).`:(x.message||x.error),x.ok);refresh();find()};box.appendChild(b)})}
+async function refresh(){
+  const m=await call('get_my_bookings');
+  if(!m.ok)$('mine').innerHTML='<span class="mut">Guest mode: you can browse, but booking needs a linked account.</span>';
+  else{let h='';m.offers.forEach(o=>h+=`<div class="item"><div><b>Slot freed!</b><div class="mut">${esc(o.service_id)} ${esc(o.date)} ${esc(o.time)} · ${o.seconds_left}s left</div></div><button class="sec" data-o="${esc(o.id)}">Accept</button></div>`);
+    m.bookings.forEach(b=>h+=`<div class="item"><div><b>${esc(b.service)}</b><div class="mut">${esc(b.date)} ${esc(b.time)} · ${esc(b.staff)} · ${esc(b.id)}</div></div><button class="sec" data-b="${esc(b.id)}">Cancel</button></div>`);
+    m.waitlist.forEach(w=>h+=`<div class="item"><span class="mut">Waitlisted: ${esc(w)}</span></div>`);
+    $('mine').innerHTML=h||'<span class="mut">No bookings yet.</span>';
+    document.querySelectorAll('[data-b]').forEach(e=>e.onclick=async()=>{const x=await call('cancel_booking',{booking_id:e.dataset.b});say(x.ok?(x.offered_to_waitlist?'Cancelled. Slot offered to the waitlist.':'Cancelled.'):x.error,x.ok);refresh()});
+    document.querySelectorAll('[data-o]').forEach(e=>e.onclick=async()=>{const x=await call('accept_offer',{offer_id:e.dataset.o});say(x.ok?'Offer accepted. Booked!':x.error,x.ok);refresh()})}
+  const s=await (await fetch('/api/stats')).json();
+  $('stats').innerHTML=[['Bookings',s.bookings],['Cancellations',s.cancellations],['Slots refilled',s.refilled],['Refill rate',Math.round(s.refill_rate*100)+'%'],['Recovered','₹'+s.recovered_revenue],['Offers sent',s.offers]].map(([k,v])=>`<div class="tile"><span class="mut">${k}</span><b>${v}</b></div>`).join('');
+  $('src').innerHTML='Source: '+esc(s.source)+(s.replay?'<br>Replay estimate ('+esc(s.replay.source)+'): '+s.replay.refilled+' of '+s.replay.no_shows+' no-shows refilled · ₹'+s.replay.recovered_revenue+' recovered. Assumption-based.':'')}
+$('find').onclick=find;$('who').onchange=()=>{$('slots').innerHTML='';say('',1);refresh()};init();
+</script></body></html>
