@@ -6,5 +6,6 @@ COPY runtime runtime
 COPY oauth oauth
 COPY examples examples
 COPY evaluation evaluation
+ENV ALLOW_DEV_TOKENS=0
 EXPOSE 8000
 CMD ["python","-m","runtime.server"]

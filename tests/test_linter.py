@@ -15,6 +15,7 @@ def test_good_server_has_no_failures(monkeypatch):
     import oauth
     from runtime.server import app
     monkeypatch.setattr(oauth, "BASE_URL", "http://127.0.0.1:8765"); monkeypatch.setattr(oauth, "RESOURCE", "http://127.0.0.1:8765/mcp")
+    monkeypatch.setenv("ALLOW_DEV_TOKENS", "1")
     serve(app(), 8765)
     res = run_checks("http://127.0.0.1:8765/mcp", "dev-alice", "dev-bob", samples=10)
     bad = [r for r in res if r["status"] == "fail"]

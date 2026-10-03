@@ -63,7 +63,7 @@ async function refresh(){
     $('mine').innerHTML=h||'<span class="mut">No bookings yet.</span>';
     document.querySelectorAll('[data-b]').forEach(e=>e.onclick=async()=>{const x=await call('cancel_booking',{booking_id:e.dataset.b});say(x.ok?(x.offered_to_waitlist?'Cancelled. Slot offered to the waitlist.':'Cancelled.'):x.error,x.ok);refresh()});
     document.querySelectorAll('[data-o]').forEach(e=>e.onclick=async()=>{const x=await call('accept_offer',{offer_id:e.dataset.o});say(x.ok?'Offer accepted. Booked!':x.error,x.ok);refresh()})}
-  const s=await (await fetch('/api/stats')).json();
+  const s=await (await fetch('/api/stats', {headers: {'Authorization': 'Bearer ' + (sessionStorage.getItem('owner_token') || 'launchpad-owner-secret')}})).json();
   $('stats').innerHTML=[['Bookings',s.bookings],['Cancellations',s.cancellations],['Slots refilled',s.refilled],['Refill rate',Math.round(s.refill_rate*100)+'%'],['Recovered','₹'+s.recovered_revenue],['Offers sent',s.offers]].map(([k,v])=>`<div class="tile"><span class="mut">${k}</span><b>${v}</b></div>`).join('');
   $('src').innerHTML='Source: '+esc(s.source)+(s.replay?'<br>Replay estimate ('+esc(s.replay.source)+'): '+s.replay.refilled+' of '+s.replay.no_shows+' no-shows refilled · ₹'+s.replay.recovered_revenue+' recovered. Assumption-based.':'')}
 $('find').onclick=find;$('who').onchange=()=>{$('slots').innerHTML='';say('',1);refresh()};init();

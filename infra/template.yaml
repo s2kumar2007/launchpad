@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: DynamoDB persistence tables and streams for Alexa+ Launchpad
+
+Parameters:
+  TablePrefix:
+    Type: String
+    Default: ''
+    Description: Optional prefix for DynamoDB table names
+
+Resources:
+  BusinessTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}Business'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: business_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: business_id
+          KeyType: HASH
+
+  SlotsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}Slots'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: slot_pk
+          AttributeType: S
+        - AttributeName: start_unit
+          AttributeType: N
+      KeySchema:
+        - AttributeName: slot_pk
+          KeyType: HASH
+        - AttributeName: start_unit
+          KeyType: RANGE
+
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}Bookings'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: customer_id
+          AttributeType: S
+        - AttributeName: start_time_booking_id
+          AttributeType: S
+        - AttributeName: business_id
+          AttributeType: S
+        - AttributeName: date
+          AttributeType: S
+      KeySchema:
+        - AttributeName: customer_id
+          KeyType: HASH
+        - AttributeName: start_time_booking_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: by_business_date
+          KeySchema:
+            - AttributeName: business_id
+              KeyType: HASH
+            - AttributeName: date
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  WaitlistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}Waitlist'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: business_service
+          AttributeType: S
+        - AttributeName: joined_customer
+          AttributeType: S
+      KeySchema:
+        - AttributeName: business_service
+          KeyType: HASH
+        - AttributeName: joined_customer
+          KeyType: RANGE
+
+  IdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}Idempotency'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: idempotency_key
+          AttributeType: S
+      KeySchema:
+        - AttributeName: idempotency_key
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  EventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}Events'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: business_id
+          AttributeType: S
+        - AttributeName: timestamp_event_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: business_id
+          KeyType: HASH
+        - AttributeName: timestamp_event_id
+          KeyType: RANGE
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  OAuthCodesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}OAuthCodes'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: code_hash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: code_hash
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: exp
+        Enabled: true
+
+  OAuthTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${TablePrefix}OAuthTokens'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token_hash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token_hash
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: exp
+        Enabled: true
+
+Outputs:
+  EventsStreamArn:
+    Description: ARN of the Events DynamoDB Stream
+    Value: !GetAtt EventsTable.StreamArn

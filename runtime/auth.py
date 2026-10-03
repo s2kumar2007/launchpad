@@ -2,10 +2,11 @@
 import os
 from oauth import validate
 DEV_TOKENS = {"dev-alice": "alice", "dev-bob": "bob", "dev-carol": "carol"}
-ALLOW_DEV = os.environ.get("ALLOW_DEV_TOKENS", "1") == "1"   # set to 0 when deployed
+def is_dev_allowed():
+    return os.environ.get("ALLOW_DEV_TOKENS", "0") == "1"
 
 def resolve_token(t):
-    return (validate(t) or (DEV_TOKENS.get(t) if ALLOW_DEV else None)) if t else None
+    return (validate(t) or (DEV_TOKENS.get(t) if is_dev_allowed() else None)) if t else None
 
 def _token(h):
     return h[7:] if h.lower().startswith("bearer ") else None

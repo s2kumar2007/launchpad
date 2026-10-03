@@ -12,7 +12,7 @@ Fill in `business.yaml` -> Launchpad generates a stateless MCP server, an Agent 
     .venv\Scripts\python -m runtime.server        # open http://localhost:8000
 
 Test client: pick Alice, book a slot; as Bob join the waitlist; Alice cancels; Bob accepts the offer. Stats show the source ("live test events").
-Dev tokens (`dev-alice`, `dev-bob`, `dev-carol`) are for local use only; set `ALLOW_DEV_TOKENS=0` in production (generated Dockerfile does).
+Dev tokens (`dev-alice`, `dev-bob`, `dev-carol`) are for local use only; `ALLOW_DEV_TOKENS` defaults to `0`. Set `ALLOW_DEV_TOKENS=1` in your environment for local testing with dev tokens (root and generated Dockerfiles default to `ALLOW_DEV_TOKENS=0`). Host validation can be configured via `ALLOWED_HOSTS` and stats access requires `OWNER_TOKEN`.
 
 ## Commands
     python -m generator.cli init --type clinic          # writes business.yaml

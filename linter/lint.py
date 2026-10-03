@@ -25,7 +25,7 @@ def pct(xs, p): xs = sorted(xs); return xs[min(len(xs) - 1, int(round(p / 100 * 
 
 def run_checks(url, token_a=None, token_b=None, samples=30, addon=None):
     cl, p = Client(url), urlparse(url); base = f"{p.scheme}://{p.netloc}"; res = []
-    day = lambda: (dt.date.today() + dt.timedelta(days=30 + random.randint(0, 300))).isoformat()
+    day = lambda: (dt.date.today() + dt.timedelta(days=random.randint(1, 60))).isoformat()
     def add(name, fn):
         try: out = fn()
         except Exception as e: out = ("fail", f"exception: {type(e).__name__}: {e}")

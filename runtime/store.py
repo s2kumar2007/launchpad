@@ -1,4 +1,5 @@
-import itertools, threading, time
+import datetime as dt, itertools, os, threading, time, zoneinfo
+from .store_base import BaseStore
 from .engines import slots
 from .engines.idempotency import IdempotencyStore
 
@@ -6,8 +7,19 @@ def to_units(hhmm):
     h, m = map(int, hhmm.split(":")); return h * 12 + m // 5
 def ceil5(x): return -(-x // 5)
 
-class Store:
-    """In-memory store. Same interface will be backed by DynamoDB (conditional writes) on deploy."""
+class Store(BaseStore):
+    """Store interface and factory."""
+    def __new__(cls, biz=None, backend=None):
+        b = backend or os.environ.get("STORE_BACKEND", "memory")
+        if b == "dynamo" and cls is Store:
+            from .dynamo_store import DynamoStore
+            return DynamoStore(biz)
+        if cls is Store:
+            return MemoryStore(biz)
+        return super().__new__(cls)
+
+class MemoryStore(Store):
+    """In-memory store implementation."""
     def __init__(self, biz):
         self.biz, self.lock = biz, threading.RLock()
         self.masks, self.bookings, self.waitlist, self.offers, self.events = {}, {}, [], {}, []
@@ -49,6 +61,14 @@ class Store:
     def _book(self, cust, sid, date, at, staff_id):
         s = self.svc(sid)
         if not s: return {"ok": False, "error": "unknown_service"}
+        try:
+            tz = zoneinfo.ZoneInfo(self.biz.timezone)
+        except Exception:
+            tz = dt.timezone.utc
+        now = dt.datetime.now(tz)
+        b_dt = dt.datetime.combine(dt.date.fromisoformat(date), dt.time.fromisoformat(at), tzinfo=tz)
+        if b_dt < now:
+            return {"ok": False, "error": "invalid_date", "message": "Cannot book an appointment in the past."}
         u, need = to_units(at), self._need(s)
         with self.lock:
             self._expire()
@@ -69,11 +89,57 @@ class Store:
     def _cancel(self, cust, bid):
         with self.lock:
             b = self.bookings.get(bid)
-            if not b or b["customer"] != cust: return {"ok": False, "error": "not_found"}
+            if not b or b["customer"] != cust or b["status"] != "BOOKED": return {"ok": False, "error": "not_found"}
+            try:
+                tz = zoneinfo.ZoneInfo(self.biz.timezone)
+            except Exception:
+                tz = dt.timezone.utc
+            now = dt.datetime.now(tz)
+            b_dt = dt.datetime.combine(dt.date.fromisoformat(b["date"]), dt.time.fromisoformat(b["time"]), tzinfo=tz)
+            if b_dt - now < dt.timedelta(hours=self.biz.rules.cancel_window_hours):
+                return {"ok": False, "error": "cancel_window_passed", "message": f"Cannot cancel within {self.biz.rules.cancel_window_hours} hours of appointment."}
             b["status"] = "CANCELLED"; self._log("CANCELLED", booking=bid, customer=cust, price=b["price"])
             offered = self._offer(b) is not None
             if not offered: self._free(b)
             return {"ok": True, "booking": self._pub(b), "offered_to_waitlist": offered}
+
+    def reschedule(self, cust, bid, date, at, staff_id=None):
+        key = IdempotencyStore.key(cust, "reschedule", [bid, date, at, staff_id])
+        r = self.idem.run(key, lambda: self._reschedule(cust, bid, date, at, staff_id))
+        if not r["ok"]: self.idem._d.pop(key, None)
+        return r
+    def _reschedule(self, cust, bid, date, at, staff_id):
+        with self.lock:
+            self._expire()
+            b = self.bookings.get(bid)
+            if not b or b["customer"] != cust or b["status"] != "BOOKED":
+                return {"ok": False, "error": "not_found", "message": "Booking not found or not active."}
+            try:
+                tz = zoneinfo.ZoneInfo(self.biz.timezone)
+            except Exception:
+                tz = dt.timezone.utc
+            now = dt.datetime.now(tz)
+            b_dt = dt.datetime.combine(dt.date.fromisoformat(b["date"]), dt.time.fromisoformat(b["time"]), tzinfo=tz)
+            if b_dt - now < dt.timedelta(hours=self.biz.rules.cancel_window_hours):
+                return {"ok": False, "error": "cancel_window_passed", "message": f"Cannot reschedule within {self.biz.rules.cancel_window_hours} hours of appointment."}
+            s = self.svc(b["service_id"])
+            if not s: return {"ok": False, "error": "unknown_service"}
+            u, need = to_units(at), self._need(s)
+            target_staff = None
+            for t in self.staff_for(s.id, staff_id):
+                m = self._mask(t, date)
+                if u + need <= slots.UNITS and all(m >> (u + i) & 1 for i in range(need)):
+                    target_staff = t
+                    self.masks[(t.id, date)] = slots.mask_busy(m, u, need)
+                    break
+            if not target_staff:
+                return {"ok": False, "error": "slot_taken", "message": "Requested slot is already taken."}
+            b["status"] = "RESCHEDULED"
+            self._log("RESCHEDULED", booking=bid, customer=cust, price=b["price"])
+            offered = self._offer(b) is not None
+            if not offered: self._free(b)
+            new_booking = self._record(cust, s, target_staff, date, at, "BOOKED")
+            return {"ok": True, "rescheduled_from": bid, "booking": new_booking["booking"], "offered_old_to_waitlist": offered}
 
     def join_waitlist(self, cust, sid, reliability=0.8):
         with self.lock:

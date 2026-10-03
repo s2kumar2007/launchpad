@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alexa+ Launchpad · Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f4f6fb; --card: #fff; --accent: #1a6fff; --accent-dark: #1455d0;
+    --danger: #d32f2f; --success: #1b8a4e; --border: #d0d7e3;
+    --text: #1a1c23; --muted: #6b7280; --radius: 10px;
+  }
+  body { background: var(--bg); color: var(--text); font: 15px/1.6 "Inter", system-ui, sans-serif; padding: 24px 16px; }
+  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 28px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+  .card h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .badge { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e8f0ff; color: var(--accent); }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  input, select, textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; font: inherit; background: var(--bg); color: var(--text); transition: border .15s; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  .field { margin-bottom: 14px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .row4 { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 12px; }
+  .staff-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border: none; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; transition: background .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-secondary { background: var(--bg); border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover { background: #eaeef5; }
+  .btn-danger { background: #fdecea; color: var(--danger); border: 1px solid #fbc4c0; }
+  .btn-danger:hover { background: #fbc4c0; }
+  .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  #yaml-preview { font-family: "Fira Mono", monospace; font-size: 0.8rem; background: #1a1c23; color: #c9d1d9; border-radius: 6px; padding: 14px; min-height: 160px; white-space: pre; overflow: auto; }
+  #result { display: none; border-left: 4px solid var(--success); background: #f0fdf6; padding: 16px; border-radius: 6px; margin-top: 16px; }
+  #result.error { border-color: var(--danger); background: #fdecea; }
+  #result h3 { font-size: 0.95rem; margin-bottom: 8px; }
+  #result pre { font-size: 0.8rem; font-family: monospace; white-space: pre-wrap; }
+  .token-row { display: flex; gap: 8px; align-items: center; }
+  .token-row input { flex: 1; }
+  .notice { font-size: 0.82rem; color: var(--muted); line-height: 1.5; padding: 10px 14px; background: #f0f4ff; border-radius: 6px; border-left: 3px solid var(--accent); margin-bottom: 16px; }
+  .section-add { margin-top: 8px; }
+  #staff-list .staff-row input { min-width: 0; }
+  @media (max-width: 640px) {
+    .row, .row3, .row4, .staff-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<h1>🚀 Alexa+ Launchpad Dashboard</h1>
+<p class="subtitle">Register a new business tenant and generate an Alexa+ MCP add-on package.</p>
+
+<!-- Owner token -->
+<div class="card">
+  <h2>🔑 Owner Token</h2>
+  <div class="notice">Enter your <code>OWNER_TOKEN</code> (set via env var on the server, default: <code>launchpad-owner-secret</code>). This stays in your browser's session storage.</div>
+  <div class="token-row">
+    <input type="password" id="owner-token" placeholder="launchpad-owner-secret" />
+    <button class="btn btn-secondary btn-sm" onclick="saveToken()">Save</button>
+    <span id="token-status" style="font-size:0.8rem;color:var(--muted)"></span>
+  </div>
+</div>
+
+<!-- Business info -->
+<div class="card">
+  <h2>🏢 Business Info</h2>
+  <div class="row">
+    <div class="field"><label>Business Name *</label><input type="text" id="biz-name" placeholder="Glow Salon" oninput="updatePreview()" /></div>
+    <div class="field"><label>Business Type *</label>
+      <select id="biz-type" onchange="updatePreview()">
+        <option value="salon">Salon</option>
+        <option value="clinic">Clinic</option>
+        <option value="restaurant">Restaurant</option>
+        <option value="spa">Spa</option>
+        <option value="gym">Gym</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+  </div>
+  <div class="field"><label>Timezone</label>
+    <select id="biz-tz" onchange="updatePreview()">
+      <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+      <option value="America/New_York">America/New_York (ET)</option>
+      <option value="America/Chicago">America/Chicago (CT)</option>
+      <option value="America/Denver">America/Denver (MT)</option>
+      <option value="America/Los_Angeles">America/Los_Angeles (PT)</option>
+      <option value="Europe/London">Europe/London (GMT/BST)</option>
+      <option value="Europe/Paris">Europe/Paris (CET)</option>
+      <option value="Australia/Sydney">Australia/Sydney (AEDT)</option>
+      <option value="UTC">UTC</option>
+    </select>
+  </div>
+</div>
+
+<!-- Services -->
+<div class="card">
+  <h2>✂️ Services <span class="badge">one or more</span></h2>
+  <div id="services-list"></div>
+  <div class="section-add">
+    <button class="btn btn-secondary btn-sm" onclick="addService()">＋ Add Service</button>
+  </div>
+</div>
+
+<!-- Staff -->
+<div class="card">
+  <h2>👤 Staff <span class="badge">one or more</span></h2>
+  <div id="staff-list"></div>
+  <div class="section-add">
+    <button class="btn btn-secondary btn-sm" onclick="addStaff()">＋ Add Staff Member</button>
+  </div>
+</div>
+
+<!-- Rules -->
+<div class="card">
+  <h2>📋 Booking Rules</h2>
+  <div class="row3">
+    <div class="field"><label>Buffer Between Bookings (min)</label><input type="number" id="rule-buffer" value="0" min="0" oninput="updatePreview()" /></div>
+    <div class="field"><label>Cancellation Window (hours)</label><input type="number" id="rule-cancel" value="2" min="0" oninput="updatePreview()" /></div>
+    <div class="field"><label>Waitlist Offer Hold (min)</label><input type="number" id="rule-hold" value="15" min="1" oninput="updatePreview()" /></div>
+  </div>
+</div>
+
+<!-- YAML Preview -->
+<div class="card">
+  <h2>📄 Live YAML Preview</h2>
+  <pre id="yaml-preview"># Fill in the form above to see the YAML here.</pre>
+</div>
+
+<!-- Submit -->
+<div class="card">
+  <h2>🚀 Register Business</h2>
+  <div class="notice">
+    <strong>Important:</strong> Submitting this form registers the business on this running server instance (in-memory).
+    To generate a deployable add-on package and Agent Skill, <code>yaml</code> is required on the server.
+    Alexa+ certification and AWS provisioning are <strong>not automated</strong> — see <code>docs/open-items.md</code>.
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" onclick="submitForm()">📤 Register &amp; Generate Add-on</button>
+    <button class="btn btn-secondary" onclick="loadExistingBusinesses()">📋 List Registered Businesses</button>
+  </div>
+  <div id="result"></div>
+</div>
+
+<!-- Existing businesses -->
+<div class="card" id="businesses-card" style="display:none">
+  <h2>📦 Registered Businesses</h2>
+  <div id="businesses-list"></div>
+</div>
+
+<script>
+// ------- State -------
+let serviceCount = 0, staffCount = 0;
+const allServices = () => [...document.querySelectorAll('.svc-row')].map(r => ({
+  id: r.querySelector('.svc-id').value.trim(),
+  name: r.querySelector('.svc-name').value.trim(),
+  duration_min: parseInt(r.querySelector('.svc-dur').value) || 30,
+  price: parseFloat(r.querySelector('.svc-price').value) || 0,
+}));
+const allStaff = () => [...document.querySelectorAll('.stf-row')].map(r => ({
+  id: r.querySelector('.stf-id').value.trim(),
+  name: r.querySelector('.stf-name').value.trim(),
+  services: r.querySelector('.stf-svcs').value.split(',').map(s=>s.trim()).filter(Boolean),
+  start: r.querySelector('.stf-start').value,
+  end: r.querySelector('.stf-end').value,
+}));
+
+// ------- Token -------
+function saveToken() {
+  const t = document.getElementById('owner-token').value.trim();
+  if (t) { sessionStorage.setItem('owner_token', t); document.getElementById('token-status').textContent = '✅ Saved'; }
+}
+function getToken() {
+  return document.getElementById('owner-token').value.trim() || sessionStorage.getItem('owner_token') || 'launchpad-owner-secret';
+}
+window.onload = () => {
+  const t = sessionStorage.getItem('owner_token');
+  if (t) document.getElementById('owner-token').value = t;
+  addService(); addService();
+  addStaff();
+  updatePreview();
+};
+
+// ------- Services -------
+function addService() {
+  serviceCount++;
+  const id = `svc${serviceCount}`;
+  const nameDefault = serviceCount === 1 ? 'Haircut' : serviceCount === 2 ? 'Consultation' : `Service ${serviceCount}`;
+  const idDefault = nameDefault.toLowerCase().replace(/\s+/g, '_');
+  const div = document.createElement('div');
+  div.className = 'svc-row row4'; div.style.marginBottom = '10px';
+  div.innerHTML = `
+    <div class="field"><label>Name</label><input class="svc-name" type="text" value="${nameDefault}" oninput="autoId(this); updatePreview()" /></div>
+    <div class="field"><label>ID (slug)</label><input class="svc-id" type="text" value="${idDefault}" oninput="updatePreview()" /></div>
+    <div class="field"><label>Duration (min)</label><input class="svc-dur" type="number" value="30" min="5" step="5" oninput="updatePreview()" /></div>
+    <div class="field"><label>Price</label><input class="svc-price" type="number" value="500" min="0" step="0.01" oninput="updatePreview()" /></div>
+    <div class="field" style="display:flex;align-items:flex-end"><button class="btn btn-danger btn-sm" onclick="this.closest('.svc-row').remove(); updatePreview()">✕</button></div>`;
+  document.getElementById('services-list').appendChild(div);
+  updatePreview();
+}
+function autoId(nameInput) {
+  const row = nameInput.closest('.svc-row') || nameInput.closest('.stf-row');
+  const idInput = row ? row.querySelector('.svc-id, .stf-id') : null;
+  if (idInput) idInput.value = nameInput.value.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'').slice(0,20);
+}
+
+// ------- Staff -------
+function addStaff() {
+  staffCount++;
+  const nameDefault = staffCount === 1 ? 'Alex' : `Staff ${staffCount}`;
+  const idDefault = nameDefault.toLowerCase();
+  const div = document.createElement('div');
+  div.className = 'stf-row staff-row';
+  div.innerHTML = `
+    <div class="field"><label>Name</label><input class="stf-name" type="text" value="${nameDefault}" oninput="autoId(this); updatePreview()" /></div>
+    <div class="field"><label>ID (slug)</label><input class="stf-id" type="text" value="${idDefault}" oninput="updatePreview()" /></div>
+    <div class="field"><label>Services (IDs, comma-sep)</label><input class="stf-svcs" type="text" value="" placeholder="haircut,consultation" oninput="updatePreview()" /></div>
+    <div class="field"><label>Start</label><input class="stf-start" type="time" value="09:00" oninput="updatePreview()" /></div>
+    <div class="field"><label>End</label><input class="stf-end" type="time" value="18:00" oninput="updatePreview()" /></div>
+    <div class="field" style="display:flex;align-items:flex-end"><button class="btn btn-danger btn-sm" onclick="this.closest('.stf-row').remove(); updatePreview()">✕</button></div>`;
+  document.getElementById('staff-list').appendChild(div);
+  // Pre-fill services with first service ids
+  const svcs = allServices().map(s=>s.id).join(',');
+  div.querySelector('.stf-svcs').value = svcs;
+  updatePreview();
+}
+
+// ------- Build config dict -------
+function buildConfig() {
+  return {
+    name: document.getElementById('biz-name').value.trim() || 'My Business',
+    type: document.getElementById('biz-type').value,
+    timezone: document.getElementById('biz-tz').value,
+    services: allServices(),
+    staff: allStaff(),
+    rules: {
+      buffer_min: parseInt(document.getElementById('rule-buffer').value) || 0,
+      cancel_window_hours: parseInt(document.getElementById('rule-cancel').value) || 2,
+      hold_offer_minutes: parseInt(document.getElementById('rule-hold').value) || 15,
+    }
+  };
+}
+
+// ------- YAML serialiser (simple, no deps) -------
+function toYaml(obj, indent=0) {
+  const pad = ' '.repeat(indent);
+  if (obj === null || obj === undefined) return 'null';
+  if (typeof obj === 'boolean') return obj.toString();
+  if (typeof obj === 'number') return obj.toString();
+  if (typeof obj === 'string') {
+    if (/[:#\[\]{}&*!|>'"%@`]|^\s|\s$/.test(obj) || obj.includes('\n')) return JSON.stringify(obj);
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return '[]';
+    return obj.map(v => {
+      if (typeof v === 'object' && !Array.isArray(v)) {
+        const entries = Object.entries(v);
+        const inline = entries.every(([,val]) => typeof val !== 'object' || Array.isArray(val) && val.every(x=>typeof x!=='object'));
+        if (inline) return `${pad}- {${entries.map(([k,val])=>`${k}: ${toYaml(val,0)}`).join(', ')}}`;
+        return `${pad}-\n${entries.map(([k,val])=>`${pad}  ${k}: ${toYaml(val,indent+2)}`).join('\n')}`;
+      }
+      return `${pad}- ${toYaml(v, indent)}`;
+    }).join('\n');
+  }
+  if (typeof obj === 'object') {
+    return Object.entries(obj).map(([k,v]) => {
+      if (typeof v === 'object' && !Array.isArray(v)) return `${pad}${k}:\n${toYaml(v, indent+2)}`;
+      if (Array.isArray(v)) return `${pad}${k}:\n${toYaml(v, indent+2)}`;
+      return `${pad}${k}: ${toYaml(v)}`;
+    }).join('\n');
+  }
+  return String(obj);
+}
+
+function updatePreview() {
+  try {
+    const cfg = buildConfig();
+    document.getElementById('yaml-preview').textContent = toYaml(cfg);
+  } catch(e) {
+    document.getElementById('yaml-preview').textContent = '# Error building preview: ' + e.message;
+  }
+}
+
+// ------- Submit -------
+async function submitForm() {
+  const cfg = buildConfig();
+  const errors = [];
+  if (!cfg.name) errors.push('Business name is required.');
+  if (!cfg.services.length) errors.push('At least one service is required.');
+  if (cfg.services.some(s=>!s.id||!s.name)) errors.push('All services need a name and ID.');
+  if (!cfg.staff.length) errors.push('At least one staff member is required.');
+  if (cfg.staff.some(s=>!s.id||!s.name)) errors.push('All staff need a name and ID.');
+  if (errors.length) { showResult('error', '⚠️ Validation Errors', errors.join('\n')); return; }
+
+  showResult('loading', '⏳ Registering...', '');
+  try {
+    const res = await fetch('/api/businesses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify(cfg),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showResult('error', `❌ Error ${res.status}`, JSON.stringify(data, null, 2)); return;
+    }
+    let msg = `✅ Business registered!\n\nSlug: ${data.slug}\nMCP URL: ${data.mcp_url}`;
+    if (data.addon) msg += `\n\nAlexaAdd-on name: ${data.addon?.storeListing?.name || '—'}`;
+    msg += `\n\nFull response:\n${JSON.stringify(data, null, 2)}`;
+    showResult('success', '✅ Success', msg);
+  } catch(e) {
+    showResult('error', '❌ Network error', e.message);
+  }
+}
+
+async function loadExistingBusinesses() {
+  const res = await fetch('/api/businesses', { headers: { 'Authorization': 'Bearer ' + getToken() } });
+  const data = await res.json();
+  const card = document.getElementById('businesses-card');
+  const list = document.getElementById('businesses-list');
+  card.style.display = '';
+  if (!data.ok || !data.businesses?.length) {
+    list.innerHTML = '<p style="color:var(--muted)">No businesses registered yet.</p>'; return;
+  }
+  list.innerHTML = data.businesses.map(b => `
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <strong>${b.config?.name || b.slug}</strong> — <code>/b/${b.slug}/mcp</code>
+      <span style="font-size:0.8rem;color:var(--muted);margin-left:8px">${b.config?.type || ''} · ${b.config?.timezone || ''}</span>
+      <br><small>${(b.config?.services||[]).map(s=>s.name).join(', ')}</small>
+    </div>`).join('');
+}
+
+function showResult(type, title, msg) {
+  const el = document.getElementById('result');
+  el.style.display = '';
+  el.className = type === 'error' ? 'error' : '';
+  el.innerHTML = `<h3>${title}</h3><pre>${msg}</pre>`;
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+</script>
+</body>
+</html>

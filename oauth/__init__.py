@@ -13,6 +13,19 @@ if os.environ.get("OAUTH_REDIRECTS"):   # TODO(verify): Alexa+ redirect URIs / c
     CLIENTS["alexa-plus"] = {"redirects": os.environ["OAUTH_REDIRECTS"].split(","), "secret": os.environ.get("OAUTH_CLIENT_SECRET")}
 _codes, _tokens = {}, {}
 
+def _dynamo_tables():
+    if os.environ.get("STORE_BACKEND") == "dynamo":
+        import boto3
+        from infra.tables import get_table_name, create_tables
+        prefix = os.environ.get("DYNAMO_TABLE_PREFIX", "")
+        dynamodb = boto3.resource("dynamodb", region_name=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        create_tables(dynamodb, prefix)
+        return {
+            "codes": dynamodb.Table(get_table_name("OAuthCodes", prefix)),
+            "tokens": dynamodb.Table(get_table_name("OAuthTokens", prefix)),
+        }
+    return None
+
 def as_metadata():
     return {"issuer": BASE_URL, "authorization_endpoint": BASE_URL + "/oauth/authorize", "token_endpoint": BASE_URL + "/oauth/token",
             "response_types_supported": ["code"], "grant_types_supported": ["authorization_code"],
@@ -23,6 +36,19 @@ def prm():
     return {"resource": RESOURCE, "authorization_servers": [BASE_URL], "scopes_supported": SCOPES, "bearer_methods_supported": ["header"]}
 
 def validate(token):
+    if not token:
+        return None
+    d = _dynamo_tables()
+    if d:
+        h = hashlib.sha256(token.encode()).hexdigest()
+        try:
+            res = d["tokens"].get_item(Key={"token_hash": h})
+            item = res.get("Item")
+            if item and float(item.get("exp", 0)) > time.time():
+                return item.get("customer")
+        except Exception:
+            pass
+        return None
     t = _tokens.get(token)
     return t["customer"] if t and t["exp"] > time.time() else None
 
@@ -53,7 +79,22 @@ def register(mcp):
         u = p.get("user")
         if u not in USERS: return _bad("Unknown user.")
         code = secrets.token_urlsafe(24)
-        _codes[code] = {"customer": u, "challenge": p["code_challenge"], "redirect_uri": p["redirect_uri"], "client_id": p["client_id"], "exp": time.time() + 600}
+        exp = int(time.time() + 600)
+        d = _dynamo_tables()
+        if d:
+            h = hashlib.sha256(code.encode()).hexdigest()
+            d["codes"].put_item(
+                Item={
+                    "code_hash": h,
+                    "customer": u,
+                    "challenge": p["code_challenge"],
+                    "redirect_uri": p["redirect_uri"],
+                    "client_id": p["client_id"],
+                    "exp": exp,
+                }
+            )
+        else:
+            _codes[code] = {"customer": u, "challenge": p["code_challenge"], "redirect_uri": p["redirect_uri"], "client_id": p["client_id"], "exp": exp}
         return _redirect(p, code=code)
     async def token(request):
         p = _flat(parse_qs((await request.body()).decode()))
@@ -65,12 +106,28 @@ def register(mcp):
         c = CLIENTS.get(p.get("client_id", ""))
         if p.get("grant_type") != "authorization_code": return err("unsupported_grant_type")
         if not c or (c["secret"] and not secrets.compare_digest(c["secret"], p.get("client_secret", ""))): return err("invalid_client")
-        e = _codes.pop(p.get("code", ""), None)    # single use, consumed on any attempt
-        if not e or e["exp"] < time.time() or e["client_id"] != p["client_id"] or e["redirect_uri"] != p.get("redirect_uri"): return err("invalid_grant")
+        d = _dynamo_tables()
+        code_val = p.get("code", "")
+        if d:
+            ch = hashlib.sha256(code_val.encode()).hexdigest()
+            try:
+                res = d["codes"].delete_item(Key={"code_hash": ch}, ReturnValues="ALL_OLD")
+                e = res.get("Attributes")
+            except Exception:
+                e = None
+        else:
+            e = _codes.pop(code_val, None)    # single use, consumed on any attempt
+        if not e or float(e["exp"]) < time.time() or e["client_id"] != p["client_id"] or e["redirect_uri"] != p.get("redirect_uri"): return err("invalid_grant")
         digest = base64.urlsafe_b64encode(hashlib.sha256(p.get("code_verifier", "").encode()).digest()).rstrip(b"=").decode()
         if not secrets.compare_digest(digest, e["challenge"]): return err("invalid_grant")
         if p.get("resource") and p["resource"] != RESOURCE: return err("invalid_target")
-        t = secrets.token_urlsafe(32); _tokens[t] = {"customer": e["customer"], "exp": time.time() + 3600}
+        t = secrets.token_urlsafe(32)
+        exp_t = int(time.time() + 3600)
+        if d:
+            th = hashlib.sha256(t.encode()).hexdigest()
+            d["tokens"].put_item(Item={"token_hash": th, "customer": e["customer"], "exp": exp_t})
+        else:
+            _tokens[t] = {"customer": e["customer"], "exp": exp_t}
         return JSONResponse({"access_token": t, "token_type": "Bearer", "expires_in": 3600, "scope": " ".join(SCOPES)}, headers=h)
     for path, fn, m in [("/.well-known/oauth-authorization-server", meta, ["GET"]), ("/.well-known/oauth-protected-resource", prm_, ["GET"]),
                         ("/.well-known/oauth-protected-resource/mcp", prm_, ["GET"]), ("/oauth/authorize", authorize, ["GET", "POST"]), ("/oauth/token", token, ["POST"])]:
